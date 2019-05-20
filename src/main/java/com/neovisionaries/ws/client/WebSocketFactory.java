@@ -694,7 +694,7 @@ public class WebSocketFactory
 
 
     private SocketConnector createProxiedRawSocket(
-            String host, int port, boolean secure, int timeout) throws IOException
+            String host, int port, boolean secure, int timeout)
     {
         // Determine the port number of the proxy server.
         // Especially, if getPort() returns -1, the value
@@ -702,19 +702,13 @@ public class WebSocketFactory
         int proxyPort = determinePort(mProxySettings.getPort(), mProxySettings.isSecure());
 
         // Select a socket factory.
-        SocketFactory socketFactory = mProxySettings.selectSocketFactory();
-
-        // Let the socket factory create a socket.
-        Socket socket = socketFactory.createSocket();
-
-        // Set up server names for SNI as necessary if possible.
-        SNIHelper.setServerNames(socket, mProxySettings.getServerNames());
+        SocketFactory factory = mProxySettings.selectSocketFactory();
 
         // The address to connect to.
         Address address = new Address(mProxySettings.getHost(), proxyPort);
 
         // The delegatee for the handshake with the proxy.
-        ProxyHandshaker handshaker = new ProxyHandshaker(socket, host, port, mProxySettings);
+        ProxyHandshaker handshaker = new ProxyHandshaker(host, port, mProxySettings);
 
         // SSLSocketFactory for SSL handshake with the WebSocket endpoint.
         SSLSocketFactory sslSocketFactory = secure ?
@@ -722,27 +716,22 @@ public class WebSocketFactory
 
         // Create an instance that will execute the task to connect to the server later.
         return new SocketConnector(
-                socket, address, timeout, handshaker, sslSocketFactory, host, port)
+                factory, address, timeout, mProxySettings.getServerNames(), handshaker,
+                sslSocketFactory, host, port)
                 .setVerifyHostname(mVerifyHostname);
     }
 
 
-    private SocketConnector createDirectRawSocket(String host, int port, boolean secure, int timeout) throws IOException
+    private SocketConnector createDirectRawSocket(String host, int port, boolean secure, int timeout)
     {
         // Select a socket factory.
         SocketFactory factory = mSocketFactorySettings.selectSocketFactory(secure);
-
-        // Let the socket factory create a socket.
-        Socket socket = factory.createSocket();
-
-        // Set up server names for SNI as necessary if possible.
-        SNIHelper.setServerNames(socket, mServerNames);
 
         // The address to connect to.
         Address address = new Address(host, port);
 
         // Create an instance that will execute the task to connect to the server later.
-        return new SocketConnector(socket, address, timeout)
+        return new SocketConnector(factory, address, timeout, mServerNames)
                 .setVerifyHostname(mVerifyHostname);
     }
 
