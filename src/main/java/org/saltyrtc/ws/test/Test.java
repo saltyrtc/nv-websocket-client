@@ -1,5 +1,6 @@
 package org.saltyrtc.ws.test;
 
+import com.neovisionaries.ws.client.ProxySettings;
 import com.neovisionaries.ws.client.WebSocket;
 import com.neovisionaries.ws.client.WebSocketAdapter;
 import com.neovisionaries.ws.client.WebSocketException;
@@ -18,6 +19,8 @@ public class Test {
         // Apply settings
         URI uri = new URI("wss://server.saltyrtc.org/debc3a6c9a630f27eae6bc3fd962925bdeb63844c09103f609bf7082bc383610");
         int timeout = 10000;
+//        ProxySettings proxySettings = factory.getProxySettings();
+//        proxySettings.setServer("https://proxy.saltyrtc.org:3128");
 
         // Create WebSocket
         WebSocket ws = factory.createSocket(uri, timeout);
