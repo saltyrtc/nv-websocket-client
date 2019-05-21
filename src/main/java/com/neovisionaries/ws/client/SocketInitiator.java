@@ -217,7 +217,7 @@ public class SocketInitiator {
                 }
             }
 
-            // Establisher complete.
+            // Racer complete.
             mLatch.countDown();
             System.out.println("-> " + mLatch.getCount());;;;
         }
