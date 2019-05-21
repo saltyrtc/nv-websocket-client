@@ -40,14 +40,17 @@ public class SocketInitiator {
             {
                 // Initial delay prior to connecting.
                 Thread.sleep(mInitialDelay);
+                System.out.println("run: slept " + mInitialDelay);;;;
 
                 // Let the socket factory create a socket.
                 socket = mSocketFactory.createSocket();
+                System.out.println("run: socket " + socket);;;;
 
                 // Set up server names for SNI as necessary if possible.
                 SNIHelper.setServerNames(socket, mServerNames);
 
                 // Connect to the server (either a proxy or a WebSocket endpoint).
+                System.out.println("run: connect");;;;
                 socket.connect(mSocketAddress, mConnectTimeout);
 
                 // Socket established
@@ -86,6 +89,7 @@ public class SocketInitiator {
             {
                 throw new IllegalStateException("Cannot set socket before awaiting!");
             }
+            System.out.println("setSocket " + socket);;;;
 
             // Set socket if not already set, otherwise close socket.
             if (mSocket == null)
@@ -93,7 +97,7 @@ public class SocketInitiator {
                 mSocket = socket;
 
                 // Stop all other establishers.
-                System.out.println("INTERRUPT!");;;;
+                System.out.println("setSocket: interrupt");;;;
                 for (SocketRacer racer: mRacers)
                 {
                     racer.interrupt();
@@ -103,6 +107,7 @@ public class SocketInitiator {
             {
                 try
                 {
+                    System.out.println("setSocket: close " + socket);;;;
                     mSocket.close();
                 }
                 catch (IOException e)
@@ -122,6 +127,7 @@ public class SocketInitiator {
             {
                 throw new IllegalStateException("Cannot set exception before awaiting!");
             }
+            System.out.println("setException " + exception);;;;
 
             // Set exception if not already set.
             if (mException == null)
@@ -151,6 +157,7 @@ public class SocketInitiator {
             mLatch.await();
 
             // Return the socket, if any, otherwise the first exception raised
+            System.out.println("await: socket=" + mSocket + ", exception=" + mException);;;;
             if (mSocket != null)
             {
                 return mSocket;
@@ -195,6 +202,7 @@ public class SocketInitiator {
             SocketAddress socketAddress = new InetSocketAddress(resolvedAddress, mAddress.getPort());
             racers.add(new SocketRacer(
                     future, mSocketFactory, socketAddress, mServerNames, delay, timeout));
+            System.out.println("establish: address=" + resolvedAddress + ":" + mAddress.getPort() + ", delay=" + delay + ", timeout=" + timeout);;;;
 
             // Increase the *happy eyeballs* delay (see RFC 6555, sec 5.5).
             // TODO: Make `delay` configurable
