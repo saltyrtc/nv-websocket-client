@@ -8,29 +8,59 @@ import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import javax.net.SocketFactory;
 
 public class SocketInitiator {
+    private class Signal
+    {
+        private final CountDownLatch mLatch;
+        private final int mMaxDelay;
+
+
+        Signal(int maxDelay)
+        {
+            mLatch    = new CountDownLatch(1);
+            mMaxDelay = maxDelay;
+        }
+
+
+        void await() throws InterruptedException
+        {
+            mLatch.await(mMaxDelay, TimeUnit.MILLISECONDS);
+        }
+
+
+        void done()
+        {
+            mLatch.countDown();
+        }
+    }
+
+
     private class SocketRacer extends Thread
     {
         private final SocketFuture mFuture;
         private final SocketFactory mSocketFactory;
         private final SocketAddress mSocketAddress;
         private String[] mServerNames;
-        private final int mInitialDelay;
         private final int mConnectTimeout;
+        private final Signal mStartSignal;
+        private final Signal mDoneSignal;
+
 
         SocketRacer(
                 SocketFuture future, SocketFactory socketFactory, SocketAddress socketAddress,
-                String[] serverNames, int initialDelay, int connectTimeout)
+                String[] serverNames, int connectTimeout, Signal startSignal, Signal doneSignal)
         {
             mFuture         = future;
             mSocketFactory  = socketFactory;
             mSocketAddress  = socketAddress;
             mServerNames    = serverNames;
-            mInitialDelay   = initialDelay;
             mConnectTimeout = connectTimeout;
+            mStartSignal    = startSignal;
+            mDoneSignal     = doneSignal;
         }
 
 
@@ -38,9 +68,14 @@ public class SocketInitiator {
             Socket socket = null;
             try
             {
-                // Initial delay prior to connecting.
-                Thread.sleep(mInitialDelay);
-                System.out.println("run: slept " + mInitialDelay);;;;
+                long el_aps = System.nanoTime();;;;
+
+                // Await start signal.
+                if (mStartSignal != null)
+                {
+                    mStartSignal.await();
+                }
+                System.out.println("run after " + ((System.nanoTime() - el_aps) / 1000000) + "ms : " + this);;;;
 
                 // Let the socket factory create a socket.
                 socket = mSocketFactory.createSocket();
@@ -71,6 +106,7 @@ public class SocketInitiator {
                 }
                 mFuture.setException(e);
             }
+            mDoneSignal.done();
         }
     }
 
@@ -81,6 +117,7 @@ public class SocketInitiator {
         private List<SocketRacer> mRacers;
         private Socket mSocket;
         private Exception mException;
+
 
         synchronized void setSocket(Socket socket)
         {
@@ -100,7 +137,7 @@ public class SocketInitiator {
                 System.out.println("setSocket: interrupt");;;;
                 for (SocketRacer racer: mRacers)
                 {
-//                    racer.interrupt();
+                    racer.interrupt();
                 }
             }
             else
@@ -120,6 +157,7 @@ public class SocketInitiator {
             mLatch.countDown();
         }
 
+
         synchronized void setException(Exception exception)
         {
             // Sanity check.
@@ -138,6 +176,7 @@ public class SocketInitiator {
             // Establisher complete.
             mLatch.countDown();
         }
+
 
         Socket await(List<SocketRacer> racers) throws Exception
         {
@@ -176,7 +215,8 @@ public class SocketInitiator {
     private final String[] mServerNames;
 
 
-    public SocketInitiator(SocketFactory socketFactory, Address address, int connectTimeout, String[] serverNames)
+    public SocketInitiator(
+            SocketFactory socketFactory, Address address, int connectTimeout, String[] serverNames)
     {
         mSocketFactory = socketFactory;
         mAddress = address;
@@ -193,20 +233,26 @@ public class SocketInitiator {
         // Create socket racer for each IP address.
         List<SocketRacer> racers = new ArrayList<SocketRacer>(addresses.length);
         int delay = 0;
+        Signal startSignal = null;
         for (InetAddress address: addresses)
         {
-            // Decrease the timeout by the accumulated delay between each connect.
-            int timeout = Math.max(0, mConnectTimeout - delay);
-
-            // Create racer to establish the socket.
-            SocketAddress socketAddress = new InetSocketAddress(address, mAddress.getPort());
-            racers.add(new SocketRacer(
-                    future, mSocketFactory, socketAddress, mServerNames, delay, timeout));
-            System.out.println("establish: address=" + address + ":" + mAddress.getPort() + ", delay=" + delay + ", timeout=" + timeout);;;;
+            System.out.println("establish: address=" + address + ":" + mAddress.getPort() + ", delay=" + delay + ", timeout=" + mConnectTimeout);;;;
 
             // Increase the *happy eyeballs* delay (see RFC 6555, sec 5.5).
             // TODO: Make `delay` configurable
             delay += 250;
+
+            // Create the *done* signal which acts as a *start* signal for the subsequent racer.
+            Signal doneSignal = new Signal(delay);
+
+            // Create racer to establish the socket.
+            SocketAddress socketAddress = new InetSocketAddress(address, mAddress.getPort());
+            SocketRacer racer = new SocketRacer(
+                    future, mSocketFactory, socketAddress, mServerNames, mConnectTimeout, startSignal, doneSignal);
+            racers.add(racer);
+
+            // Replace *start* signal with this racer's *done* signal.
+            startSignal = doneSignal;
         }
 
         // Wait until one of the sockets has been established, or all failed with an exception.
