@@ -26,6 +26,12 @@ public class SocketInitiator {
         }
 
 
+        boolean isDone()
+        {
+            return mLatch.getCount() == 0;
+        }
+
+
         void await() throws InterruptedException
         {
             mLatch.await(mMaxDelay, TimeUnit.MILLISECONDS);
@@ -90,10 +96,12 @@ public class SocketInitiator {
                 socket.connect(mSocketAddress, mConnectTimeout);
 
                 // Socket established.
-                mFuture.setSocket(socket);
+                complete(socket);
             }
             catch (Exception e)
             {
+                abort(e);
+
                 if (socket != null)
                 {
                     try
@@ -106,10 +114,36 @@ public class SocketInitiator {
                         // ignored
                     }
                 }
-
-                // Socket not established.
-                mFuture.setException(e);
             }
+        }
+
+
+        synchronized private void complete(Socket socket)
+        {
+            // Check if already completed or aborted.
+            if (mDoneSignal.isDone())
+            {
+                return;
+            }
+
+            // Socket established.
+            mFuture.setSocket(socket);
+
+            // Socket racer complete.
+            mDoneSignal.done();
+        }
+
+
+        synchronized void abort(Exception exception)
+        {
+            // Check if already completed or aborted.
+            if (mDoneSignal.isDone())
+            {
+                return;
+            }
+
+            // Socket not established.
+            mFuture.setException(exception);
 
             // Socket racer complete.
             mDoneSignal.done();
@@ -140,9 +174,10 @@ public class SocketInitiator {
                 mSocket = socket;
 
                 // Stop all other establishers.
-                System.out.println("setSocket: interrupt");;;;
                 for (SocketRacer racer: mRacers)
                 {
+                    System.out.println("setSocket: interrupt " + racer);;;;
+                    racer.abort(new InterruptedException());
                     racer.interrupt();
                 }
             }
