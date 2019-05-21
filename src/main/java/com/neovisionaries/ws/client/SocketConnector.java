@@ -23,6 +23,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -54,6 +55,7 @@ class SocketConnector
     private final String mHost;
     private final int mPort;
     private boolean mVerifyHostname;
+    private Socket mSocket;
 
     SocketConnector(SocketFactory socketFactory, Address address, int timeout, String[] serverNames)
     {
@@ -77,37 +79,131 @@ class SocketConnector
     }
 
 
-    public Socket getSocket()
-    {
-        return mSocket;
-    }
-
-
     public int getConnectionTimeout()
     {
         return mConnectionTimeout;
     }
 
 
-    public void connect() throws WebSocketException
+    public Socket getSocket()
+    {
+        return mSocket;
+    }
+
+
+    public Socket getConnectedSocket() throws WebSocketException
+    {
+        // Connect lazily.
+        if (mSocket == null)
+        {
+            connectSocket();
+        }
+
+        return mSocket;
+    }
+
+
+    private void connectSocket() throws WebSocketException
+    {
+        // Create socket initiator.
+        SocketInitiator socketInitiator = new SocketInitiator(
+                mSocketFactory, mAddress, mConnectionTimeout, mServerNames);
+
+        // Resolve hostname to IP addresses
+        List<InetAddress> addresses = resolveHostname();
+
+        // Let the sockets race until one has been established, following
+        // RFC 6555 (*happy eyeballs*).
+        try
+        {
+            mSocket = socketInitiator.establish(addresses);
+        }
+        catch (Exception e)
+        {
+            // True if a proxy server is set.
+            boolean proxied = mProxyHandshaker != null;
+
+            // Failed to connect the server.
+            String message = String.format("Failed to connect to %s'%s': %s",
+                    (proxied ? "the proxy " : ""), mAddress, e.getMessage());
+
+            // Raise an exception with SOCKET_CONNECT_ERROR.
+            throw new WebSocketException(WebSocketError.SOCKET_CONNECT_ERROR, message, e);
+        }
+    }
+
+
+    private List<InetAddress> resolveHostname() throws WebSocketException
+    {
+        List<InetAddress> addresses = new ArrayList<InetAddress>();
+        UnknownHostException exception = null;
+
+        try
+        {
+            // Resolve hostname to IPv6 addresses.
+            // TODO: Allow to force v6 only
+            addresses.addAll(Arrays.asList(Inet6Address.getAllByName(mAddress.getHostname())));
+        }
+        catch (UnknownHostException e)
+        {
+            exception = e;
+        }
+
+        try
+        {
+            // Resolve hostname to IPv4 addresses.
+            // TODO: Allow to force v4 only
+            addresses.addAll(Arrays.asList(Inet4Address.getAllByName(mAddress.getHostname())));
+        }
+        catch (UnknownHostException e)
+        {
+            exception = e;
+        }
+
+        // Return the ordered IP addresses (if any), otherwise raise the exception.
+        if (addresses.size() > 0)
+        {
+            return addresses;
+        }
+
+        if (exception == null)
+        {
+            exception = new UnknownHostException("No IP addresses found");
+        }
+
+        // Failed to resolve hostname for IPv6.
+        String message = String.format("Failed to resolve hostname %s: %s",
+                mAddress, exception.getMessage());
+
+        // Raise an exception with SOCKET_CONNECT_ERROR.
+        throw new WebSocketException(WebSocketError.SOCKET_CONNECT_ERROR, message, exception);
+    }
+
+
+    public Socket connect() throws WebSocketException
     {
         try
         {
             // Connect to the server (either a proxy or a WebSocket endpoint).
             doConnect();
+            assert mSocket != null;
+            return mSocket;
         }
         catch (WebSocketException e)
         {
             // Failed to connect the server.
 
-            try
+            if (mSocket != null)
             {
-                // Close the socket.
-                mSocket.close();
-            }
-            catch (IOException ioe)
-            {
-                // Ignore any error raised by close().
+                try
+                {
+                    // Close the socket.
+                    mSocket.close();
+                }
+                catch (IOException ioe)
+                {
+                    // Ignore any error raised by close().
+                }
             }
 
             throw e;
@@ -123,205 +219,20 @@ class SocketConnector
     }
 
 
-    private class SocketFuture
-    {
-        private final CountDownLatch mLatch;
-        private final List<SocketEstablisher> mEstablishers;
-        private Socket mSocket;
-        private Exception mException;
-
-        SocketFuture(List<SocketEstablisher> establishers)
-        {
-            mLatch        = new CountDownLatch(establishers.size());
-            mEstablishers = establishers;
-
-            // Attach future to establishers.
-            for (SocketEstablisher establisher: mEstablishers)
-            {
-                establisher.setFuture(this);
-            }
-        }
-
-        public void setSocket(Socket socket)
-        {
-            // Set socket if not already set, otherwise close socket.
-            if (mSocket == null)
-            {
-                mSocket = socket;
-
-                // Stop all other establishers.
-                for (SocketEstablisher establisher: mEstablishers)
-                {
-                    establisher.interrupt();
-                }
-            }
-            else
-            {
-                try
-                {
-                    mSocket.close();
-                }
-                catch (IOException e)
-                {
-                    // ignored
-                }
-            }
-
-            // Establisher complete.
-            mLatch.countDown();
-        }
-
-        public void setException(Exception exception)
-        {
-            // Set exception if not already set.
-            if (mException == null)
-            {
-                mException = exception;
-            }
-
-            // Establisher complete.
-            mLatch.countDown();
-        }
-
-        public Socket await() throws Exception
-        {
-            mLatch.await();
-
-            // Return the socket, if any, otherwise the first exception raised
-            if (mSocket != null)
-            {
-                return mSocket;
-            }
-            else
-            {
-                throw mException;
-            }
-        }
-    }
-
-
-    private class SocketEstablisher extends Thread
-    {
-        private final SocketFactory mSocketFactory;
-        private final SocketAddress mSocketAddress;
-        private String[] mServerNames;
-        private final int mInitialDelay;
-        private final int mConnectTimeout;
-        private SocketFuture mFuture;
-
-        SocketEstablisher(
-                SocketFactory socketFactory, SocketAddress socketAddress,
-                String[] serverNames, int initialDelay, int connectTimeout)
-        {
-            mSocketFactory  = socketFactory;
-            mSocketAddress  = socketAddress;
-            mServerNames    = serverNames;
-            mInitialDelay   = initialDelay;
-            mConnectTimeout = connectTimeout;
-        }
-
-        public void setFuture(SocketFuture future)
-        {
-            mFuture = future;
-        }
-
-        public void run() {
-            Socket socket = null;
-            try
-            {
-                // Initial delay prior to connecting.
-                Thread.sleep(mInitialDelay);
-
-                // Let the socket factory create a socket.
-                socket = mSocketFactory.createSocket();
-
-                // Set up server names for SNI as necessary if possible.
-                SNIHelper.setServerNames(socket, mServerNames);
-
-                // Connect to the server (either a proxy or a WebSocket endpoint).
-                socket.connect(mSocketAddress, mConnectTimeout);
-
-                // Socket established
-                mFuture.setSocket(socket);
-            }
-            catch (Exception e)
-            {
-                if (socket != null)
-                {
-                    try
-                    {
-                        socket.close();
-                    }
-                    catch (IOException ioe)
-                    {
-                        // ignored
-                    }
-                }
-                mFuture.setException(e);
-            }
-        }
-    }
-
-
     private void doConnect() throws WebSocketException
     {
         // True if a proxy server is set.
         boolean proxied = mProxyHandshaker != null;
 
-        try
+        // Establish a socket associated to one of the resolved IP addresses
+        connectSocket();
+        assert mSocket != null;
+
+        if (mSocket instanceof SSLSocket)
         {
-            // Resolve hostname to IPv4 and IPv6 addresses.
-            List<InetAddress> resolvedAddresses = new ArrayList<InetAddress>();
-            // TODO: Allow to force v6 only
-            resolvedAddresses.addAll(Arrays.asList(Inet6Address.getAllByName(mAddress.getHostname())));
-            // TODO: Allow to force v4 only
-            resolvedAddresses.addAll(Arrays.asList(Inet4Address.getAllByName(mAddress.getHostname())));
-
-            // Create socket establishment instance for each IP address.
-            List<SocketEstablisher> socketEstablishers = new ArrayList<SocketEstablisher>(
-                    resolvedAddresses.size());
-            int delay = 0;
-            for (InetAddress resolvedAddress: resolvedAddresses)
-            {
-                // Decrease the timeout by the accumulated delay between each connect.
-                int timeout = Math.max(0, mConnectionTimeout - delay);
-
-                // Create thread to establish the socket.
-                SocketAddress socketAddress = new InetSocketAddress(resolvedAddress, mAddress.getPort());
-                socketEstablishers.add(new SocketEstablisher(
-                        mSocketFactory, socketAddress, mServerNames, delay, timeout));
-
-                // Increase the *happy eyeballs* delay (see RFC 6555, sec 5.5).
-                // TODO: Make `delay` configurable
-                delay += 250;
-            }
-
-            // Wrap socket establishment instances in a future.
-            SocketFuture socketFuture = new SocketFuture(socketEstablishers);
-
-            // Wait until one of the sockets has been established or all failed with an exception.
-            socketFuture.await();
-
-
-
-            // Connect to the server (either a proxy or a WebSocket endpoint).
-            mSocket.connect(mAddress.toInetSocketAddress(), mConnectionTimeout);
-
-            if (mSocket instanceof SSLSocket)
-            {
-                // Verify that the hostname matches the certificate here since
-                // this is not automatically done by the SSLSocket.
-                verifyHostname((SSLSocket)mSocket, mAddress.getHostname());
-            }
-        }
-        catch (Exception e)
-        {
-            // Failed to connect the server.
-            String message = String.format("Failed to connect to %s'%s': %s",
-                (proxied ? "the proxy " : ""), mAddress, e.getMessage());
-
-            // Raise an exception with SOCKET_CONNECT_ERROR.
-            throw new WebSocketException(WebSocketError.SOCKET_CONNECT_ERROR, message, e);
+            // Verify that the hostname matches the certificate here since
+            // this is not automatically done by the SSLSocket.
+            verifyHostname((SSLSocket)mSocket, mAddress.getHostname());
         }
 
         // If a proxy server is set.
@@ -365,10 +276,13 @@ class SocketConnector
      */
     private void handshake() throws WebSocketException
     {
+        // Sanity check
+        assert mSocket != null;
+
         try
         {
             // Perform handshake with the proxy server.
-            mProxyHandshaker.perform();
+            mProxyHandshaker.perform(mSocket);
         }
         catch (IOException e)
         {
@@ -427,13 +341,16 @@ class SocketConnector
 
     void closeSilently()
     {
-        try
+        if (mSocket != null)
         {
-            mSocket.close();
-        }
-        catch (Throwable t)
-        {
-            // Ignored.
+            try
+            {
+                mSocket.close();
+            }
+            catch (Throwable t)
+            {
+                // Ignored.
+            }
         }
     }
 }
