@@ -82,7 +82,7 @@ public class SocketInitiator {
         private Socket mSocket;
         private Exception mException;
 
-        void setSocket(Socket socket)
+        synchronized void setSocket(Socket socket)
         {
             // Sanity check.
             if (mLatch == null || mRacers == null)
@@ -120,7 +120,7 @@ public class SocketInitiator {
             mLatch.countDown();
         }
 
-        void setException(Exception exception)
+        synchronized void setException(Exception exception)
         {
             // Sanity check.
             if (mLatch == null || mRacers == null)
