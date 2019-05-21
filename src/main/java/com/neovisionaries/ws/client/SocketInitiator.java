@@ -127,7 +127,7 @@ public class SocketInitiator {
             }
 
             // Socket established.
-            mFuture.setSocket(socket);
+            mFuture.setSocket(this, socket);
 
             // Socket racer complete.
             mDoneSignal.done();
@@ -159,7 +159,7 @@ public class SocketInitiator {
         private Exception mException;
 
 
-        synchronized void setSocket(Socket socket)
+        synchronized void setSocket(SocketRacer current, Socket socket)
         {
             // Sanity check.
             if (mLatch == null || mRacers == null)
@@ -173,12 +173,18 @@ public class SocketInitiator {
             {
                 mSocket = socket;
 
-                // Stop all other establishers.
+                // Stop all other racers.
                 for (SocketRacer racer: mRacers)
                 {
-                    System.out.println("setSocket: interrupt " + racer);;;;
+                    // Skip instance that is setting the socket.
+                    if (racer == current)
+                    {
+                        continue;
+                    }
+                    System.out.println("setSocket: interrupt-before " + racer);;;;
                     racer.abort(new InterruptedException());
                     racer.interrupt();
+                    System.out.println("setSocket: interrupt-after " + racer);;;;
                 }
             }
             else
@@ -196,6 +202,7 @@ public class SocketInitiator {
 
             // Establisher complete.
             mLatch.countDown();
+            System.out.println("-> " + mLatch.getCount());;;;
         }
 
 
@@ -216,6 +223,7 @@ public class SocketInitiator {
 
             // Establisher complete.
             mLatch.countDown();
+            System.out.println("-> " + mLatch.getCount());;;;
         }
 
 
