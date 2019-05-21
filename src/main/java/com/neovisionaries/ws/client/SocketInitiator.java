@@ -118,35 +118,40 @@ public class SocketInitiator {
         }
 
 
-        synchronized private void complete(Socket socket)
+        private void complete(Socket socket)
         {
-            // Check if already completed or aborted.
-            if (mDoneSignal.isDone())
+            synchronized (mFuture)
             {
-                return;
+                // Check if already completed or aborted.
+                if (mDoneSignal.isDone()) {
+                    return;
+                }
+
+                // Socket established.
+                mFuture.setSocket(this, socket);
+
+                // Socket racer complete.
+                mDoneSignal.done();
             }
-
-            // Socket established.
-            mFuture.setSocket(this, socket);
-
-            // Socket racer complete.
-            mDoneSignal.done();
         }
 
 
-        synchronized void abort(Exception exception)
+        void abort(Exception exception)
         {
-            // Check if already completed or aborted.
-            if (mDoneSignal.isDone())
+            synchronized (mFuture)
             {
-                return;
+                // Check if already completed or aborted.
+                if (mDoneSignal.isDone())
+                {
+                    return;
+                }
+
+                // Socket not established.
+                mFuture.setException(exception);
+
+                // Socket racer complete.
+                mDoneSignal.done();
             }
-
-            // Socket not established.
-            mFuture.setException(exception);
-
-            // Socket racer complete.
-            mDoneSignal.done();
         }
     }
 
