@@ -238,7 +238,7 @@ public class SocketInitiator {
                 mException = exception;
             }
 
-            // Establisher complete.
+            // Racer complete.
             mLatch.countDown();
             System.out.println("-> " + mLatch.getCount());;;;
         }
