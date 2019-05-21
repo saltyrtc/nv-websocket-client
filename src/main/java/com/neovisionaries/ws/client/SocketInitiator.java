@@ -82,13 +82,14 @@ public class SocketInitiator {
                 System.out.println("run: socket " + socket);;;;
 
                 // Set up server names for SNI as necessary if possible.
+                System.out.println("run: setServerNames: " + mServerNames);;;;
                 SNIHelper.setServerNames(socket, mServerNames);
 
                 // Connect to the server (either a proxy or a WebSocket endpoint).
                 System.out.println("run: connect");;;;
                 socket.connect(mSocketAddress, mConnectTimeout);
 
-                // Socket established
+                // Socket established.
                 mFuture.setSocket(socket);
             }
             catch (Exception e)
@@ -97,6 +98,7 @@ public class SocketInitiator {
                 {
                     try
                     {
+                        System.out.println("run: close " + socket);;;;
                         socket.close();
                     }
                     catch (IOException ioe)
@@ -104,8 +106,12 @@ public class SocketInitiator {
                         // ignored
                     }
                 }
+
+                // Socket not established.
                 mFuture.setException(e);
             }
+
+            // Socket racer complete.
             mDoneSignal.done();
         }
     }
@@ -145,7 +151,7 @@ public class SocketInitiator {
                 try
                 {
                     System.out.println("setSocket: close " + socket);;;;
-                    mSocket.close();
+                    socket.close();
                 }
                 catch (IOException e)
                 {

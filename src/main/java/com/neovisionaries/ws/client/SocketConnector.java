@@ -17,20 +17,12 @@ package com.neovisionaries.ws.client;
 
 
 import java.io.IOException;
-import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.net.SocketAddress;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
 
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSession;
@@ -329,12 +321,9 @@ class SocketConnector
             // http://docs.oracle.com/javase/7/docs/technotes/guides/security/jsse/samples/sockets/client/SSLSocketClient.java
             ((SSLSocket)mSocket).startHandshake();
 
-            if (mSocket instanceof SSLSocket)
-            {
-                // Verify that the proxied hostname matches the certificate here since
-                // this is not automatically done by the SSLSocket.
-                verifyHostname((SSLSocket)mSocket, mProxyHandshaker.getProxiedHostname());
-            }
+            // Verify that the proxied hostname matches the certificate here since
+            // this is not automatically done by the SSLSocket.
+            verifyHostname((SSLSocket)mSocket, mProxyHandshaker.getProxiedHostname());
         }
         catch (IOException e)
         {
