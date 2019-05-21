@@ -81,6 +81,12 @@ public class SocketInitiator {
                 {
                     mStartSignal.await();
                 }
+
+                // Check if a socket has already been established.
+                if (mFuture.hasSocket())
+                {
+                    return;
+                }
                 System.out.println("run after " + ((System.nanoTime() - el_aps) / 1000000) + "ms : " + this);;;;
 
                 // Let the socket factory create a socket.
@@ -162,6 +168,12 @@ public class SocketInitiator {
         private List<SocketRacer> mRacers;
         private Socket mSocket;
         private Exception mException;
+
+
+        synchronized boolean hasSocket()
+        {
+            return mSocket != null;
+        }
 
 
         synchronized void setSocket(SocketRacer current, Socket socket)
