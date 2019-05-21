@@ -26,6 +26,7 @@ import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -110,7 +111,7 @@ class SocketConnector
                 mSocketFactory, mAddress, mConnectionTimeout, mServerNames);
 
         // Resolve hostname to IP addresses
-        List<InetAddress> addresses = resolveHostname();
+        InetAddress[] addresses = resolveHostname();
 
         // Let the sockets race until one has been established, following
         // RFC 6555 (*happy eyeballs*).
@@ -133,27 +134,35 @@ class SocketConnector
     }
 
 
-    private List<InetAddress> resolveHostname() throws WebSocketException
+    // TODO: Allow to force v4 only
+    // TODO: Allow to force v6 only
+    private InetAddress[] resolveHostname() throws WebSocketException
     {
-        List<InetAddress> addresses = new ArrayList<InetAddress>();
+        InetAddress[] addresses = null;
         UnknownHostException exception = null;
 
         try
         {
-            // Resolve hostname to IPv6 addresses.
-            // TODO: Allow to force v6 only
-            addresses.addAll(Arrays.asList(Inet6Address.getAllByName(mAddress.getHostname())));
-        }
-        catch (UnknownHostException e)
-        {
-            exception = e;
-        }
+            // Resolve hostname to IP addresses addresses.
+            addresses = InetAddress.getAllByName(mAddress.getHostname());
 
-        try
-        {
-            // Resolve hostname to IPv4 addresses.
-            // TODO: Allow to force v4 only
-            addresses.addAll(Arrays.asList(Inet4Address.getAllByName(mAddress.getHostname())));
+            // Sort addresses: IPv6 first, then IPv4.
+            Arrays.sort(addresses, new Comparator<InetAddress>() {
+                public int compare(InetAddress left, InetAddress right) {
+                    if (left.getClass() == right.getClass())
+                    {
+                        return 0;
+                    }
+                    if (left instanceof Inet6Address)
+                    {
+                        return -1;
+                    }
+                    else
+                    {
+                        return 1;
+                    }
+                }
+            });
         }
         catch (UnknownHostException e)
         {
@@ -161,7 +170,7 @@ class SocketConnector
         }
 
         // Return the ordered IP addresses (if any), otherwise raise the exception.
-        if (addresses.size() > 0)
+        if (addresses != null && addresses.length > 0)
         {
             return addresses;
         }

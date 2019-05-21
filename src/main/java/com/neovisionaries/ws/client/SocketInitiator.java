@@ -100,7 +100,7 @@ public class SocketInitiator {
                 System.out.println("setSocket: interrupt");;;;
                 for (SocketRacer racer: mRacers)
                 {
-                    racer.interrupt();
+//                    racer.interrupt();
                 }
             }
             else
@@ -185,24 +185,24 @@ public class SocketInitiator {
     }
 
 
-    public Socket establish(List<InetAddress> addresses) throws Exception
+    public Socket establish(InetAddress[] addresses) throws Exception
     {
         // Create socket future.
         SocketFuture future = new SocketFuture();
 
         // Create socket racer for each IP address.
-        List<SocketRacer> racers = new ArrayList<SocketRacer>(addresses.size());
+        List<SocketRacer> racers = new ArrayList<SocketRacer>(addresses.length);
         int delay = 0;
-        for (InetAddress resolvedAddress: addresses)
+        for (InetAddress address: addresses)
         {
             // Decrease the timeout by the accumulated delay between each connect.
             int timeout = Math.max(0, mConnectTimeout - delay);
 
             // Create racer to establish the socket.
-            SocketAddress socketAddress = new InetSocketAddress(resolvedAddress, mAddress.getPort());
+            SocketAddress socketAddress = new InetSocketAddress(address, mAddress.getPort());
             racers.add(new SocketRacer(
                     future, mSocketFactory, socketAddress, mServerNames, delay, timeout));
-            System.out.println("establish: address=" + resolvedAddress + ":" + mAddress.getPort() + ", delay=" + delay + ", timeout=" + timeout);;;;
+            System.out.println("establish: address=" + address + ":" + mAddress.getPort() + ", delay=" + delay + ", timeout=" + timeout);;;;
 
             // Increase the *happy eyeballs* delay (see RFC 6555, sec 5.5).
             // TODO: Make `delay` configurable
