@@ -1,5 +1,6 @@
 package org.saltyrtc.ws.test;
 
+import com.neovisionaries.ws.client.DualStackMode;
 import com.neovisionaries.ws.client.ProxySettings;
 import com.neovisionaries.ws.client.WebSocket;
 import com.neovisionaries.ws.client.WebSocketAdapter;
@@ -21,6 +22,8 @@ public class Test {
         int timeout = 10000;
 //        ProxySettings proxySettings = factory.getProxySettings();
 //        proxySettings.setServer("https://proxy.saltyrtc.org:3128");
+        factory.setDualStackFallbackDelay(1337);
+//        factory.setDualStackMode(DualStackMode.IPV6_ONLY);
 
         // Create WebSocket
         WebSocket ws = factory.createSocket(uri, timeout);

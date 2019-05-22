@@ -274,6 +274,12 @@ public class WebSocketFactory
      */
     public WebSocketFactory setDualStackFallbackDelay(int delay)
     {
+
+        if (delay < 0)
+        {
+            throw new IllegalArgumentException("delay value cannot be negative.");
+        }
+
         mDualStackFallbackDelay = delay;
 
         return this;
