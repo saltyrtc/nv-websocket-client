@@ -14,7 +14,24 @@ import java.util.concurrent.TimeUnit;
 
 import javax.net.SocketFactory;
 
+
+/**
+ * Lets multiple sockets race the given IP addresses until one has been
+ * established.
+ *
+ * This follows <a href="https://tools.ietf.org/html/rfc6555">RFC 6555 (Happy
+ * Eyeballs)</a>.
+ *
+ * @author Lennart Grahl
+ */
 public class SocketInitiator {
+    /**
+     * A <i>wait</i> signal will be awaited by a {@link SocketRacer} before it
+     * starts to connect.
+     *
+     * When a {@link SocketRacer} <i>A</i> is done, it will unblock the
+     * following racer <i>B</i> by marking <i>B's</i> signal as <i>done</i>.
+     */
     private class Signal
     {
         private final CountDownLatch mLatch;
@@ -47,6 +64,17 @@ public class SocketInitiator {
     }
 
 
+    /**
+     * This thread connects to a socket and notifies a {@link SocketFuture}
+     * shared across all racer threads when it is done. A racer thread is done
+     * when...
+     *
+     * <ul>
+     * <li>it has established a connection, or</li>
+     * <li>when establishing a connection failed with an exception, or</li>
+     * <li>another racer established a connection.</li>
+     * </ul>
+     */
     private class SocketRacer extends Thread
     {
         private final SocketFuture mFuture;
@@ -164,6 +192,21 @@ public class SocketInitiator {
     }
 
 
+    /**
+     * The socket future is shared across all {@link SocketRacer} threads and
+     * aggregates the results. A socket future is considered fulfilled when...
+     *
+     * <ul>
+     * <li>any racer thread has established a socket in which case all
+     *     other racers will be stopped, or</li>
+     * <li>all racer threads returned with an exception, or</li>
+     * <li>there was no racer thread (e.g. in case there is no network
+     *     interface).</li>
+     * </ul>
+     *
+     * In the first case, the socket will be returned. In all other cases, an
+     * exception will be thrown, indicating the failure type.
+     */
     private class SocketFuture
     {
         private CountDownLatch mLatch;
