@@ -47,6 +47,8 @@ class SocketConnector
     private final SSLSocketFactory mSSLSocketFactory;
     private final String mHost;
     private final int mPort;
+    private DualStackMode mDualStackMode = DualStackMode.BOTH;
+    private int mDualStackFallbackDelay = 250;
     private boolean mVerifyHostname;
     private Socket mSocket;
 
@@ -100,7 +102,8 @@ class SocketConnector
     {
         // Create socket initiator.
         SocketInitiator socketInitiator = new SocketInitiator(
-                mSocketFactory, mAddress, mConnectionTimeout, mServerNames);
+                mSocketFactory, mAddress, mConnectionTimeout, mServerNames,
+                mDualStackMode, mDualStackFallbackDelay);
 
         // Resolve hostname to IP addresses
         InetAddress[] addresses = resolveHostname();
@@ -126,8 +129,6 @@ class SocketConnector
     }
 
 
-    // TODO: Allow to force v4 only
-    // TODO: Allow to force v6 only
     private InetAddress[] resolveHostname() throws WebSocketException
     {
         InetAddress[] addresses = null;
@@ -209,6 +210,15 @@ class SocketConnector
 
             throw e;
         }
+    }
+
+
+    SocketConnector setDualStackSettings(DualStackMode mode, int fallbackDelay)
+    {
+        mDualStackMode          = mode;
+        mDualStackFallbackDelay = fallbackDelay;
+
+        return this;
     }
 
 

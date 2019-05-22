@@ -34,6 +34,8 @@ public class WebSocketFactory
     private final SocketFactorySettings mSocketFactorySettings;
     private final ProxySettings mProxySettings;
     private int mConnectionTimeout;
+    private DualStackMode mDualStackMode = DualStackMode.BOTH;
+    private int mDualStackFallbackDelay = 250;
     private boolean mVerifyHostname = true;
     private String[] mServerNames;
 
@@ -197,6 +199,82 @@ public class WebSocketFactory
         }
 
         mConnectionTimeout = timeout;
+
+        return this;
+    }
+
+
+    /**
+     * Get the dual stack mode that will be applied when establishing a socket
+     * connection. The default value is {@link DualStackMode#BOTH}.
+     *
+     * <p>
+     * A hostname may contain an arbitrary amount of IPv4 and IPv6 addresses.
+     * This controls which IP address families will be used when establishing
+     * a connection. Note that IPv6 will be preferred, if activated.
+     * </p>
+     *
+     * @return
+     *         The dual stack mode.
+     */
+    public DualStackMode getmDualStackMode()
+    {
+        return mDualStackMode;
+    }
+
+
+    /**
+     * Set the dual stack mode that will be applied when establishing a socket
+     * connection.
+     *
+     * @param mode
+     *         The dual stack mode to be applied.
+     *
+     * @return
+     *         {@code this} object.
+     */
+    public WebSocketFactory setDualStackMode(DualStackMode mode)
+    {
+        mDualStackMode = mode;
+
+        return this;
+    }
+
+
+    /**
+     * Get the dual stack fallback delay in milliseconds that will be applied
+     * when establishing a socket connection.
+     *
+     * <p>
+     * A hostname may contain an arbitrary amount of IPv4 and IPv6 addresses.
+     * This controls the maximum amount of time that may pass between attempts
+     * to establish a socket connection to an IP addresses before trying the
+     * next one. Note that the previous attempt will not be aborted. The
+     * connections will race until one has been established.
+     * </p>
+     *
+     * @return
+     *         The dual stack fallback delay in milliseconds.
+     */
+    public int getDualStackFallbackDelay()
+    {
+        return mDualStackFallbackDelay;
+    }
+
+
+    /**
+     * Set the dual stack fallback delay in milliseconds that will be applied
+     * when establishing a socket connection.
+     *
+     * @param delay
+     *         The dual stack fallback delay in milliseconds.
+     *
+     * @return
+     *         {@code this} object.
+     */
+    public WebSocketFactory setDualStackFallbackDelay(int delay)
+    {
+        mDualStackFallbackDelay = delay;
 
         return this;
     }
@@ -718,6 +796,7 @@ public class WebSocketFactory
         return new SocketConnector(
                 factory, address, timeout, mProxySettings.getServerNames(), handshaker,
                 sslSocketFactory, host, port)
+                .setDualStackSettings(mDualStackMode, mDualStackFallbackDelay)
                 .setVerifyHostname(mVerifyHostname);
     }
 
@@ -732,6 +811,7 @@ public class WebSocketFactory
 
         // Create an instance that will execute the task to connect to the server later.
         return new SocketConnector(factory, address, timeout, mServerNames)
+                .setDualStackSettings(mDualStackMode, mDualStackFallbackDelay)
                 .setVerifyHostname(mVerifyHostname);
     }
 

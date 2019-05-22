@@ -1,6 +1,8 @@
 package com.neovisionaries.ws.client;
 
 import java.io.IOException;
+import java.net.Inet4Address;
+import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -267,9 +269,14 @@ public class SocketInitiator {
             {
                 return mSocket;
             }
-            else
+            else if (mException != null)
             {
                 throw mException;
+            }
+            else
+            {
+                throw new WebSocketException(WebSocketError.SOCKET_CONNECT_ERROR,
+                        "No viable interface to connect");
             }
         }
     }
@@ -279,15 +286,20 @@ public class SocketInitiator {
     private final Address mAddress;
     private final int mConnectTimeout;
     private final String[] mServerNames;
+    private final DualStackMode mMode;
+    private final int mFallbackDelay;
 
 
     public SocketInitiator(
-            SocketFactory socketFactory, Address address, int connectTimeout, String[] serverNames)
+            SocketFactory socketFactory, Address address, int connectTimeout, String[] serverNames,
+            DualStackMode mode, int fallbackDelay)
     {
-        mSocketFactory = socketFactory;
-        mAddress = address;
+        mSocketFactory  = socketFactory;
+        mAddress        = address;
         mConnectTimeout = connectTimeout;
-        mServerNames = serverNames;
+        mServerNames    = serverNames;
+        mMode           = mode;
+        mFallbackDelay  = fallbackDelay;
     }
 
 
@@ -302,11 +314,26 @@ public class SocketInitiator {
         Signal startSignal = null;
         for (InetAddress address: addresses)
         {
+            // Check if the mode requires us to skip this address.
+            switch (mMode)
+            {
+                case BOTH:
+                    break;
+                case IPV4_ONLY:
+                    if (!(address instanceof Inet4Address))
+                    {
+                        continue;
+                    }
+                case IPV6_ONLY:
+                    if (!(address instanceof Inet6Address))
+                    {
+                        continue;
+                    }
+            }
             System.out.println("establish: address=" + address + ":" + mAddress.getPort() + ", delay=" + delay + ", timeout=" + mConnectTimeout);;;;
 
             // Increase the *happy eyeballs* delay (see RFC 6555, sec 5.5).
-            // TODO: Make `delay` configurable
-            delay += 250;
+            delay += mFallbackDelay;
 
             // Create the *done* signal which acts as a *start* signal for the subsequent racer.
             Signal doneSignal = new Signal(delay);
@@ -314,7 +341,8 @@ public class SocketInitiator {
             // Create racer to establish the socket.
             SocketAddress socketAddress = new InetSocketAddress(address, mAddress.getPort());
             SocketRacer racer = new SocketRacer(
-                    future, mSocketFactory, socketAddress, mServerNames, mConnectTimeout, startSignal, doneSignal);
+                    future, mSocketFactory, socketAddress, mServerNames, mConnectTimeout,
+                    startSignal, doneSignal);
             racers.add(racer);
 
             // Replace *start* signal with this racer's *done* signal.
