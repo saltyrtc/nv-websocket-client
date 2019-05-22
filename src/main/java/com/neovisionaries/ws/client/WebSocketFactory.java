@@ -217,7 +217,7 @@ public class WebSocketFactory
      * @return
      *         The dual stack mode.
      */
-    public DualStackMode getmDualStackMode()
+    public DualStackMode getDualStackMode()
     {
         return mDualStackMode;
     }
